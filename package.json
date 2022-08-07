@@ -1,0 +1,34 @@
+{
+  "name": "copy-jwt",
+  "version": "1.0.0",
+  "description": "chrome extension which searches a jwt token in local storage and copies it to the clipboard",
+  "scripts": {
+    "dist": "rm -rf dist && tsc --outDir dist && cp src/manifest.json dist/ && cp -r src/images dist/",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bianucci/copy-jwt.git"
+  },
+  "keywords": [
+    "chrome",
+    "extension",
+    "jwt",
+    "localstorage",
+    "copy",
+    "clipboard"
+  ],
+  "author": "Claudio Bianucci",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bianucci/copy-jwt/issues"
+  },
+  "homepage": "https://github.com/bianucci/copy-jwt#readme",
+  "devDependencies": {
+    "@types/chrome": "^0.0.193",
+    "@typescript-eslint/eslint-plugin": "^5.32.0",
+    "@typescript-eslint/parser": "^5.32.0",
+    "eslint": "^8.21.0",
+    "typescript": "^4.7.4"
+  }
+}

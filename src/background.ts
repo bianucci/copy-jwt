@@ -2,11 +2,15 @@ chrome.action.onClicked.addListener(function (tab) {
   findJwtTokenForTab(tab);
 });
 
-async function findJwtTokenForTab(tab) {
+async function findJwtTokenForTab(tab: chrome.tabs.Tab) {
+  if (!tab.id) {
+    throw new Error("no tab id");
+  }
+
   chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    function: () => {
-      function copy(text) {
+    func: () => {
+      function copy(text: string) {
         const ta = document.createElement("textarea");
         ta.style.cssText =
           "opacity:0; position:fixed; width:1px; height:1px; top:0; left:0;";
@@ -19,8 +23,11 @@ async function findJwtTokenForTab(tab) {
       }
 
       // iterate over local storage values
-      const tokens = Object.values(localStorage)
-        .filter((entry) => entry.includes("ey"))
+      const candidateEntries = Object.values(
+        localStorage as Record<string, string | undefined>
+      ).filter((entry) => !!entry?.includes("ey")) as string[];
+
+      const tokens = candidateEntries
         .map((entry) => {
           // jwt found as simple string
           if (entry.startsWith("ey")) {
@@ -29,12 +36,16 @@ async function findJwtTokenForTab(tab) {
 
           try {
             // try to find jwt inside JSON
-            const object = JSON.parse(entry);
-            return Object.values(object).filter((jwtCandidate) =>
-              jwtCandidate.includes("ey")
-            );
+            const object: Record<string, string | Record<string, unknown>> =
+              JSON.parse(entry);
+            return Object.values(object).filter((jwtCandidate) => {
+              if (typeof jwtCandidate === "string") {
+                return jwtCandidate.includes("ey");
+              }
+              return false; // TODO support nested structures
+            }) as string[];
           } catch {
-            return [];
+            return [] as string[];
           }
         })
         .reduce((acc, jwtCandidates) => {
