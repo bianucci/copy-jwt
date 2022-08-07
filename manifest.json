@@ -1,0 +1,17 @@
+{
+  "name": "copy-jwt",
+  "description": "Search jwt token in local storage and copy to clipboard",
+  "version": "0.1",
+  "manifest_version": 3,
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["activeTab", "scripting"],
+  "action": {},
+  "icons": {
+    "16": "/images/key-16.png",
+    "32": "/images/key-32.png",
+    "48": "/images/key-48.png",
+    "128": "/images/key-128.png"
+  }
+}
