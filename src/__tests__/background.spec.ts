@@ -1,5 +1,3 @@
-/* eslint-disable no-global-assign */
-
 import { setup } from "../background";
 
 type DeepPartial<T> = T extends object

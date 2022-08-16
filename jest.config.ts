@@ -1,9 +1,10 @@
-/** @type {import('ts-jest/dist/types').InitialOptionsTsJest} */
+import { InitialOptionsTsJest } from "ts-jest";
 
-module.exports = {
+const options: InitialOptionsTsJest = {
   testEnvironment: "jsdom",
   preset: "ts-jest",
   globals: {
+    "ts-jest": {},
     chrome: {
       action: {
         onClicked: {
@@ -13,3 +14,5 @@ module.exports = {
     },
   },
 };
+
+module.exports = options;
