@@ -109,12 +109,24 @@ describe("finding json web tokens", () => {
     expect(window.alert).toHaveBeenCalledWith("no token was found");
   });
 
-  it("handles too nested values", () => {
+  it("handles nested values", () => {
     setStorage({
       key: JSON.stringify({ deep: { deeper: { jwt: VALID_JWT_ENCODED } } }),
     });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith("no token was found");
+    expect(window.alert).toHaveBeenCalledWith(
+      `copied jwt token for: ${VALID_JWT_PAYLOAD}`
+    );
+  });
+
+  it("handles array values", () => {
+    setStorage({
+      key: JSON.stringify({ deep: { deeper: { jwt: [VALID_JWT_ENCODED] } } }),
+    });
+    executeScript();
+    expect(window.alert).toHaveBeenCalledWith(
+      `copied jwt token for: ${VALID_JWT_PAYLOAD}`
+    );
   });
 
   it("handles plain string values", () => {

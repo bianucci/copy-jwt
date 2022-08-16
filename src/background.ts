@@ -1,4 +1,6 @@
-type Searchable = Record<string, string | undefined | null>;
+type Searchable = {
+  [key: string]: string | Searchable;
+};
 
 export const setup = () => {
   chrome.action.onClicked.addListener(function (tab) {
@@ -31,36 +33,44 @@ export const setup = () => {
 
         function findJwtTokens(searchable: Searchable): string[] {
           // values in local storage which may contain jwt token starting with "ey..."
-          const candidateEntries = Object.values(searchable).filter(
-            (entry) => !!entry?.includes("ey")
-          ) as string[];
+          const candidateEntries = Object.values(searchable).filter((entry) => {
+            if (!entry) {
+              return false;
+            }
+            if (typeof entry === "string") {
+              return entry.includes("ey");
+            } else {
+              return Object.entries(entry).length;
+            }
+          });
 
-          // all plain strings found starting with "ey..."
           const jwtCandidates = candidateEntries
             .map((candidate) => {
-              // jwt is simple string
-              if (candidate.startsWith("ey")) {
+              if (typeof candidate === "string" && candidate.startsWith("ey")) {
+                // jwt is simple string
                 return [candidate];
               }
 
-              // jwt is probably inside an object structure
-
               try {
-                // try to find jwt inside record like object
-                const object: Record<string, string | Record<string, unknown>> =
-                  JSON.parse(candidate);
+                let furtherSearchable = candidate;
 
-                const tokensInObject = Object.values(object).filter(
-                  (jwtCandidate) => {
+                if (typeof candidate === "string") {
+                  furtherSearchable = JSON.parse(candidate);
+                }
+
+                const tokens = Object.values(furtherSearchable).reduce(
+                  (acc, jwtCandidate) => {
                     if (typeof jwtCandidate !== "string") {
-                      // TODO add support for nested structures
-                      return false;
+                      return [...acc, ...findJwtTokens(jwtCandidate)];
+                    } else if (jwtCandidate.includes("ey")) {
+                      acc.push(jwtCandidate);
                     }
-                    return jwtCandidate.includes("ey");
-                  }
+                    return acc;
+                  },
+                  [] as string[]
                 );
 
-                return tokensInObject as string[];
+                return tokens as string[];
               } catch {
                 return [] as string[];
               }
