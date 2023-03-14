@@ -8,13 +8,16 @@ type DeepPartial<T> = T extends object
 
 const VALID_JWT_ENCODED =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjB9._U45K6oXhpt8xelFL8626lSpnstATbSEFoSvVcPI7hs";
+const VALID_JWT_DECODED = new RegExp(`"iat": 0`);
 
-const VALID_JWT_PAYLOAD = `{
-  "iat": 0
-}`;
+const VALID_JWT_ENCODED_2 =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjEyM30.7x1uKPG4b-rT8wth-zGhZoBrKUk6EQ8ssbodRWj-K38";
+const VALID_JWT_DECODED_2 = new RegExp(`"iat": 123`);
 
 const TOKEN_WITH_TYPE_OTHER_THAN_JWT =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6Ik5PVEpXVCJ9.eyJpYXQiOjB9.5JlNCW1LMsn4sgnwVZ6PdI0DZPRk5vk9kGZzLH8VYcg";
+
+const NO_TOKEN_TEXT = /No token was found!/gi;
 
 let listener: (tab: chrome.tabs.Tab) => void;
 let executeScript: () => void;
@@ -39,8 +42,6 @@ globalThis.chrome = mockChrome as typeof chrome;
 
 setup();
 
-window.document.execCommand = jest.fn();
-
 function setStorage(value: Record<string, string | null | undefined>) {
   Object.defineProperty(window, "localStorage", {
     value,
@@ -51,6 +52,8 @@ function setStorage(value: Record<string, string | null | undefined>) {
 describe("finding json web tokens", () => {
   beforeEach(() => {
     global.alert = jest.fn();
+    window.document.execCommand = jest.fn();
+    global.document.body.innerHTML = "";
   });
 
   it("throws error for invalid tab", () => {
@@ -62,25 +65,25 @@ describe("finding json web tokens", () => {
   it("handles empty storage", () => {
     setStorage({});
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith("no token was found");
+    expect(window.global.document.body.innerHTML).toMatch(NO_TOKEN_TEXT);
   });
 
   it("handles undefined values", () => {
     setStorage({ key: undefined });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith("no token was found");
+    expect(window.global.document.body.innerHTML).toMatch(NO_TOKEN_TEXT);
   });
 
   it("handles empty strings", () => {
     setStorage({ key: "" });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith("no token was found");
+    expect(window.global.document.body.innerHTML).toMatch(NO_TOKEN_TEXT);
   });
 
   it("handles null values", () => {
     setStorage({ key: null });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith("no token was found");
+    expect(window.global.document.body.innerHTML).toMatch(NO_TOKEN_TEXT);
   });
 
   it("handles tokens which are valid bot not of type JWT", () => {
@@ -88,7 +91,7 @@ describe("finding json web tokens", () => {
       key: JSON.stringify({ layer1: TOKEN_WITH_TYPE_OTHER_THAN_JWT }),
     });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith("no token was found");
+    expect(window.global.document.body.innerHTML).toMatch(NO_TOKEN_TEXT);
   });
 
   it("handles garbage tokens", () => {
@@ -96,7 +99,7 @@ describe("finding json web tokens", () => {
       key: "eyasdasdasd",
     });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith("no token was found");
+    expect(window.global.document.body.innerHTML).toMatch(NO_TOKEN_TEXT);
   });
 
   it("handles garbage json", () => {
@@ -104,7 +107,7 @@ describe("finding json web tokens", () => {
       key: "{something not json eyasdasdasd}",
     });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith("no token was found");
+    expect(window.global.document.body.innerHTML).toMatch(NO_TOKEN_TEXT);
   });
 
   it("handles nested values", () => {
@@ -112,9 +115,7 @@ describe("finding json web tokens", () => {
       key: JSON.stringify({ deep: { deeper: { jwt: VALID_JWT_ENCODED } } }),
     });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith(
-      `copied jwt token for: ${VALID_JWT_PAYLOAD}`
-    );
+    expect(window.global.document.body.innerHTML).toMatch(VALID_JWT_DECODED);
   });
 
   it("handles array values", () => {
@@ -122,32 +123,78 @@ describe("finding json web tokens", () => {
       key: JSON.stringify({ deep: { deeper: { jwt: [VALID_JWT_ENCODED] } } }),
     });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith(
-      `copied jwt token for: ${VALID_JWT_PAYLOAD}`
-    );
+    expect(window.global.document.body.innerHTML).toMatch(VALID_JWT_DECODED);
   });
 
   it("handles plain string values", () => {
     setStorage({ key: VALID_JWT_ENCODED });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith(
-      `copied jwt token for: ${VALID_JWT_PAYLOAD}`
-    );
+    expect(window.global.document.body.innerHTML).toMatch(VALID_JWT_DECODED);
   });
 
   it("handles tokens embedded in objects", () => {
     setStorage({ key: JSON.stringify({ layer1: VALID_JWT_ENCODED }) });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith(
-      `copied jwt token for: ${VALID_JWT_PAYLOAD}`
+    expect(window.global.document.body.innerHTML).toMatch(VALID_JWT_DECODED);
+  });
+
+  it("copies single token", () => {
+    setStorage({ token1: VALID_JWT_ENCODED });
+    executeScript();
+    expect(window.global.document.body.innerHTML).toMatch(
+      /Copied to clipboard/gi
     );
   });
 
   it("handles multiple tokens were found", () => {
-    setStorage({ token1: VALID_JWT_ENCODED, token2: VALID_JWT_ENCODED });
+    setStorage({ token1: VALID_JWT_ENCODED, token2: VALID_JWT_ENCODED_2 });
     executeScript();
-    expect(window.alert).toHaveBeenCalledWith(
-      `found more than one token, see console`
+    expect(window.global.document.body.innerHTML).toMatch(VALID_JWT_ENCODED);
+    expect(window.global.document.body.innerHTML).toMatch(VALID_JWT_DECODED);
+    expect(window.global.document.body.innerHTML).toMatch(VALID_JWT_ENCODED_2);
+    expect(window.global.document.body.innerHTML).toMatch(VALID_JWT_DECODED_2);
+  });
+
+  it("translates numbers to date", () => {
+    setStorage({ token1: VALID_JWT_ENCODED, token2: VALID_JWT_ENCODED_2 });
+    executeScript();
+    expect(window.global.document.body.innerHTML).toMatch(VALID_JWT_DECODED);
+    expect(window.global.document.body.innerHTML).toMatch(
+      new RegExp(`"iat_as_date": "${new Date(123).toLocaleString()}"`)
     );
+  });
+
+  it("removed modal", () => {
+    setStorage({ token1: VALID_JWT_ENCODED, token2: VALID_JWT_ENCODED_2 });
+
+    expect(global.document.body.children.length).toBe(0);
+    executeScript();
+    expect(global.document.body.children.length).toBe(1);
+
+    global.document
+      .querySelector<HTMLButtonElement>("#copy-jwt-close-modal")
+      ?.click();
+
+    expect(global.document.body.children.length).toBe(0);
+  });
+
+  it("copies single value to clipboard", () => {
+    expect(window.document.execCommand).not.toHaveBeenCalled();
+    setStorage({ token1: VALID_JWT_ENCODED });
+    executeScript();
+    expect(window.document.execCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("copies selected value to clipboard", () => {
+    expect(window.document.execCommand).not.toHaveBeenCalled();
+    setStorage({ token1: VALID_JWT_ENCODED, token2: VALID_JWT_ENCODED_2 });
+    executeScript();
+    expect(window.document.execCommand).not.toHaveBeenCalled();
+
+    global.document
+      .querySelector<HTMLButtonElement>(".copy-jwt-copy-jwt")
+      ?.click();
+
+    expect(window.document.execCommand).toHaveBeenCalledTimes(1);
   });
 });

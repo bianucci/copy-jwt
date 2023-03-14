@@ -1,0 +1,46 @@
+<html>
+  <body>
+    <div>
+      <strong>JWT:</strong>
+      <pre>
+            eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+        </pre
+      >
+    </div>
+    <div>
+      <strong>JWT:</strong>
+      <pre>
+            {
+                "alg": "HS256",
+                "typ": "JWT"
+            }.{
+                "sub": "1234567890",
+                "name": "John Doe",
+                "iat": 1516239022
+            }.[Signature]
+        </pre
+      >
+    </div>
+    <div>
+      <button id="install">Install token in local storage</button>
+      <button id="clear">Clear local storage</button>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function (event) {
+        const token =
+          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+        const value = JSON.stringify({ token: token });
+
+        document.getElementById("install").addEventListener("click", () => {
+          const key = new Date().toString();
+          window.localStorage.setItem(key, value);
+        });
+
+        document
+          .getElementById("clear")
+          .addEventListener("click", () => localStorage.clear());
+      });
+    </script>
+  </body>
+</html>
