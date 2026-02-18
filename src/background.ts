@@ -2,6 +2,8 @@ type Searchable = {
   [key: string]: string | Searchable;
 };
 
+type TokenEntry = { token: string; label?: string };
+
 export const setup = () => {
   chrome.action.onClicked.addListener(function (tab) {
     if (!tab.id) {
@@ -10,7 +12,14 @@ export const setup = () => {
 
     chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => {
+      func: (async () => {
+        function b64u(s: string): Uint8Array<ArrayBuffer> {
+          s = s.replace(/-/g, "+").replace(/_/g, "/");
+          if (s.length % 4 === 2) s += "==";
+          if (s.length % 4 === 3) s += "=";
+          return Uint8Array.from(atob(s), (c) => c.charCodeAt(0)) as Uint8Array<ArrayBuffer>;
+        }
+
         function prettyJwtPayload(encoded: string) {
           const parsed = Object.entries(
             JSON.parse(atob(encoded.split(".")[1]))
@@ -95,7 +104,117 @@ export const setup = () => {
           });
         }
 
-        function asModal(tokens: string[]) {
+        async function getMsalCookieKey(): Promise<string | null> {
+          try {
+            let cookieRaw: string | undefined;
+
+            const cookieStoreValue = await (
+              window as unknown as {
+                cookieStore?: { get?: (name: string) => Promise<{ value: string } | null> };
+              }
+            ).cookieStore?.get?.("msal.cache.encryption");
+
+            if (cookieStoreValue?.value) {
+              cookieRaw = cookieStoreValue.value;
+            } else {
+              const cookieStr = document.cookie
+                .split("; ")
+                .find((c) => c.startsWith("msal.cache.encryption="));
+              if (cookieStr) {
+                cookieRaw = cookieStr.substring("msal.cache.encryption=".length);
+              }
+            }
+
+            if (!cookieRaw) return null;
+
+            const { key } = JSON.parse(decodeURIComponent(cookieRaw));
+            return key as string;
+          } catch {
+            return null;
+          }
+        }
+
+        async function findMsalTokens(rawKey: string): Promise<TokenEntry[]> {
+          const results: TokenEntry[] = [];
+
+          let baseKey: CryptoKey;
+          try {
+            baseKey = await crypto.subtle.importKey(
+              "raw",
+              b64u(rawKey),
+              "HKDF",
+              false,
+              ["deriveKey"]
+            );
+          } catch {
+            return results;
+          }
+
+          const tkKeys = Object.keys(localStorage).filter((k) =>
+            k.startsWith("msal.2.token.keys.")
+          );
+
+          for (const tkKey of tkKeys) {
+            const clientId = tkKey.substring("msal.2.token.keys.".length);
+
+            let tokenKeyMap: { idToken?: string[]; accessToken?: string[] };
+            try {
+              tokenKeyMap = JSON.parse((localStorage[tkKey] as string | null) ?? "{}");
+            } catch {
+              continue;
+            }
+
+            const tokenTypes: Array<[string[], string]> = [
+              [tokenKeyMap.idToken ?? [], "MSAL idToken"],
+              [tokenKeyMap.accessToken ?? [], "MSAL accessToken"],
+            ];
+
+            for (const [keys, label] of tokenTypes) {
+              for (const tokenKey of keys) {
+                try {
+                  const entry = JSON.parse(
+                    (localStorage[tokenKey] as string | null) ?? "{}"
+                  );
+                  const { nonce, data } = entry as {
+                    nonce: string;
+                    data: string;
+                  };
+
+                  const aesKey = await crypto.subtle.deriveKey(
+                    {
+                      name: "HKDF",
+                      salt: b64u(nonce),
+                      hash: "SHA-256",
+                      info: new TextEncoder().encode(clientId),
+                    },
+                    baseKey,
+                    { name: "AES-GCM", length: 256 },
+                    false,
+                    ["decrypt"]
+                  );
+
+                  const decrypted = await crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv: new Uint8Array(12) },
+                    aesKey,
+                    b64u(data)
+                  );
+
+                  const secret: string = JSON.parse(
+                    new TextDecoder().decode(decrypted)
+                  ).secret;
+
+                  results.push({ token: secret, label });
+                } catch {
+                  // skip tokens that fail to decrypt
+                }
+              }
+            }
+          }
+
+          return results;
+        }
+
+        function asModal(entries: TokenEntry[]) {
           return `<div id="copy-jwt-modal">
             <div id="copy-jwt-modal-content">
               <div id="copy-jwt-modal-header">
@@ -108,18 +227,19 @@ export const setup = () => {
               </div>
               <div id="copy-jwt-modal-body">
               ${
-                tokens.length
-                  ? tokens.reduce(
-                      (acc, token, index) =>
+                entries.length
+                  ? entries.reduce(
+                      (acc, entry, index) =>
                         (acc += `<div style="margin: 8px 0px;">
+                          ${entry.label ? `<small style="color: gray">${entry.label}</small><br/>` : ""}
                           ${
-                            tokens.length === 1
+                            entries.length === 1
                               ? `<span style="color: red">Copied to clipboard!</span>`
-                              : `<button class="copy-jwt-copy-jwt" jwt="${token}">Copy JWT</button>`
+                              : `<button class="copy-jwt-copy-jwt" jwt="${entry.token}">Copy JWT</button>`
                           }
-                          <pre>${prettyJwtPayload(token)}</pre>
+                          <pre>${prettyJwtPayload(entry.token)}</pre>
                         </div>
-                        ${index < tokens.length - 1 ? "<hr/>" : ""}`),
+                        ${index < entries.length - 1 ? "<hr/>" : ""}`),
                       ""
                     )
                   : "No token was found!"
@@ -180,7 +300,7 @@ export const setup = () => {
               #copy-jwt-modal button:hover {
                 background: rgba(0,0,0,0.1);
               }
-              
+
               #copy-jwt-modal pre {
                 background: rgba(0,0,0,0.02);
                 padding: 8px;
@@ -197,12 +317,26 @@ export const setup = () => {
           <div>`;
         }
 
-        const tokens = findJwtTokens(localStorage);
-        if (tokens.length === 1) {
-          copyToClipboard(tokens[0]);
+        const plainTokens: TokenEntry[] = findJwtTokens(localStorage).map(
+          (t) => ({ token: t })
+        );
+
+        const cookieKey = await getMsalCookieKey();
+        const msalTokens: TokenEntry[] = cookieKey
+          ? await findMsalTokens(cookieKey)
+          : [];
+
+        const seen = new Set(plainTokens.map((e) => e.token));
+        const allTokens = [
+          ...plainTokens,
+          ...msalTokens.filter((e) => !seen.has(e.token)),
+        ];
+
+        if (allTokens.length === 1) {
+          copyToClipboard(allTokens[0].token);
         }
 
-        document.body.insertAdjacentHTML("beforeend", asModal(tokens));
+        document.body.insertAdjacentHTML("beforeend", asModal(allTokens));
 
         document
           .getElementById("copy-jwt-close-modal")
@@ -218,7 +352,7 @@ export const setup = () => {
             }
           });
         });
-      },
+      }) as () => void,
     });
   });
 };
