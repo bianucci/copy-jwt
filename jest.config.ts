@@ -1,10 +1,12 @@
-import { InitialOptionsTsJest } from "ts-jest";
+import type { JestConfigWithTsJest } from "ts-jest";
 
-const options: InitialOptionsTsJest = {
+const config: JestConfigWithTsJest = {
   testEnvironment: "jsdom",
-  preset: "ts-jest",
+  setupFiles: ["./jest.setup.ts"],
+  transform: {
+    "^.+\\.tsx?$": ["ts-jest", {}],
+  },
   globals: {
-    "ts-jest": {},
     chrome: {
       action: {
         onClicked: {
@@ -15,4 +17,4 @@ const options: InitialOptionsTsJest = {
   },
 };
 
-module.exports = options;
+module.exports = config;
