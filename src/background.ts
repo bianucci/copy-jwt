@@ -13,6 +13,7 @@ export const setup = () => {
     chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: (async () => {
+        try {
         function b64u(s: string): Uint8Array<ArrayBuffer> {
           s = s.replace(/-/g, "+").replace(/_/g, "/");
           if (s.length % 4 === 2) s += "==";
@@ -293,7 +294,7 @@ export const setup = () => {
           style.textContent = `
             #copy-jwt-modal {
               display:flex;
-              position:absolute;
+              position:fixed;
               top:0;
               left:0;
               right:0;
@@ -314,6 +315,9 @@ export const setup = () => {
               background:white;
               box-shadow: 0 3px 10px rgb(0 0 0 / 0.2);
               border-bottom:1px solid gray;
+              width: min(920px, calc(100vw - 24px));
+              max-height: calc(100vh - 24px);
+              overflow: hidden;
             }
 
             #copy-jwt-modal-header {
@@ -329,8 +333,8 @@ export const setup = () => {
             }
 
             #copy-jwt-modal-body {
-              max-height: 80vh;
-              overflow: scroll;
+              max-height: calc(100vh - 110px);
+              overflow: auto;
               padding: 8px;
             }
 
@@ -352,6 +356,11 @@ export const setup = () => {
               border-radius: 5px;
               font-family: monospace;
               margin: 5px 0;
+              max-width: 100%;
+              box-sizing: border-box;
+              white-space: pre-wrap;
+              overflow-wrap: anywhere;
+              word-break: break-word;
             }
 
             #copy-jwt-modal hr {
@@ -382,8 +391,27 @@ export const setup = () => {
           copyToClipboard(allTokens[0].token);
         }
 
-        document.body.appendChild(asModal(allTokens));
+        const modal = asModal(allTokens);
+        const existingModal = document.getElementById("copy-jwt-modal");
+
+        if (existingModal) {
+          existingModal.replaceWith(modal);
+        } else {
+          document.body.appendChild(modal);
+        }
+        } catch (error) {
+          console.error("[copy-jwt] executeScript runtime error", error);
+        }
       }) as () => void,
+    }, () => {
+      if (chrome.runtime.lastError) {
+        console.error(
+          "[copy-jwt] executeScript failed:",
+          chrome.runtime.lastError.message
+        );
+      } else {
+        console.info("[copy-jwt] executeScript completed");
+      }
     });
   });
 };
